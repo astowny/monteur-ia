@@ -6,20 +6,90 @@
     <style>
       body { font-family: Arial, sans-serif; margin: 24px; background: #0f172a; color: #f8fafc; }
       .card { background: #1e293b; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+      .row { display: grid; gap: 8px; margin-bottom: 12px; }
+      label { font-size: 13px; color: #cbd5e1; }
+      input, select { padding: 8px; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: #f8fafc; }
+      button { background: #2563eb; border: none; color: white; border-radius: 8px; padding: 10px 12px; cursor: pointer; }
       code { color: #93c5fd; }
+      .muted { color: #94a3b8; font-size: 13px; }
     </style>
   </head>
   <body>
     <h1>Monteur IA — Desktop Shell (MVP)</h1>
     <div class="card">
-      <p>Ce shell sert de base UI pour brancher :</p>
-      <ul>
-        <li>Import vidéo</li>
-        <li>Pipeline FFmpeg (prepare/export)</li>
-        <li>Transcription Whisper</li>
-        <li>Cloud jobs Pro</li>
-      </ul>
-      <p>Backend local attendu sur <code>http://127.0.0.1:8000</code>.</p>
+      <p>Le backend local est lancé automatiquement depuis ce shell.</p>
+      <p class="muted">URL backend: <code>http://127.0.0.1:8000</code></p>
     </div>
+
+    <div class="card">
+      <h3>Configuration runtime (Local / Prod)</h3>
+      <div class="row">
+        <label>Environnement</label>
+        <select id="env">
+          <option value="dev">dev</option>
+          <option value="staging">staging</option>
+          <option value="prod">prod</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label>Mode transcription</label>
+        <select id="mode">
+          <option value="local">local</option>
+          <option value="api">api</option>
+          <option value="stub">stub (dev only)</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label>API Key (backend)</label>
+        <input id="apiKey" placeholder="MONTEUR_API_KEY" />
+      </div>
+
+      <div class="row">
+        <label>Whisper API URL (si mode api)</label>
+        <input id="whisperUrl" placeholder="https://..." />
+      </div>
+
+      <div class="row">
+        <label>Whisper API Key (si mode api)</label>
+        <input id="whisperKey" placeholder="token" />
+      </div>
+
+      <button id="saveBtn">Sauvegarder et redémarrer backend</button>
+      <p class="muted" id="status"></p>
+    </div>
+
+    <script>
+      async function init() {
+        const conf = await window.monteur.getConfig();
+        document.getElementById('env').value = conf.MONTEUR_ENV || 'dev';
+        document.getElementById('mode').value = conf.MONTEUR_TRANSCRIBE_MODE || 'local';
+        document.getElementById('apiKey').value = conf.MONTEUR_API_KEY || '';
+        document.getElementById('whisperUrl').value = conf.WHISPER_API_URL || '';
+        document.getElementById('whisperKey').value = conf.WHISPER_API_KEY || '';
+      }
+
+      document.getElementById('saveBtn').addEventListener('click', async () => {
+        const conf = await window.monteur.getConfig();
+        conf.MONTEUR_ENV = document.getElementById('env').value;
+        conf.MONTEUR_TRANSCRIBE_MODE = document.getElementById('mode').value;
+        conf.MONTEUR_API_KEY = document.getElementById('apiKey').value;
+        conf.WHISPER_API_URL = document.getElementById('whisperUrl').value;
+        conf.WHISPER_API_KEY = document.getElementById('whisperKey').value;
+
+        const status = document.getElementById('status');
+        status.textContent = 'Sauvegarde en cours...';
+
+        try {
+          await window.monteur.saveConfig(conf);
+          status.textContent = 'Configuration appliquée. Backend redémarré.';
+        } catch (err) {
+          status.textContent = `Erreur: ${err.message || err}`;
+        }
+      });
+
+      init();
+    </script>
   </body>
 </html>

@@ -17,8 +17,18 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "renderer.html",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend-dist",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
       "target": [

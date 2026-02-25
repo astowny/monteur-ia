@@ -95,3 +95,12 @@ Guide complet: `docs/windows-build.md`
 ## Référence production
 
 - Checklist: `docs/production-readiness.md`
+
+
+## Mode Local / Prod et backend dans le même `.exe`
+
+- Le shell Electron supporte maintenant une config runtime (UI) avec redémarrage backend.
+- Le backend est lancé automatiquement par le shell:
+  - priorité à `resources/backend/monteur-backend.exe` (release packagée),
+  - fallback dev via `python -c ... uvicorn ...`.
+- Guide détaillé: `docs/single-exe-runtime.md`.
