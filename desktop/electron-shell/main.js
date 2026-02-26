@@ -115,14 +115,27 @@ async function startBackend() {
   return ok ? 'ok' : 'timeout';
 }
 
-function stopBackend() {
+async function stopBackend() {
   if (!backendProcess) return;
-  try {
-    backendProcess.kill();
-  } catch (_err) {
-    // no-op
-  }
+  const proc = backendProcess;
   backendProcess = null;
+
+  return new Promise((resolve) => {
+    // Timeout de sécurité : on ne bloque pas indéfiniment.
+    const timer = setTimeout(resolve, 5000);
+
+    proc.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+
+    try {
+      proc.kill();
+    } catch (_err) {
+      clearTimeout(timer);
+      resolve();
+    }
+  });
 }
 
 function createWindow() {
@@ -146,7 +159,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('config:get', () => loadConfig());
   ipcMain.handle('config:save', async (_event, conf) => {
     saveConfig(conf);
-    stopBackend();
+    await stopBackend(); // attend que le port 8000 soit libéré
     const result = await startBackend();
     return { ok: result === 'ok', status: result };
   });

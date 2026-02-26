@@ -57,8 +57,8 @@
       </div>
 
       <div class="row">
-        <label>API Key (backend)</label>
-        <input id="apiKey" placeholder="MONTEUR_API_KEY" />
+        <label>API Key <span class="muted">(obligatoire en prod — chaîne secrète de ton choix)</span></label>
+        <input id="apiKey" placeholder="ex: mon-token-secret-2024" />
       </div>
 
       <div class="row">
@@ -71,6 +71,7 @@
         <input id="whisperKey" placeholder="token" />
       </div>
 
+      <div id="warn-box" style="display:none;background:#78350f;color:#fde68a;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:8px;"></div>
       <button id="saveBtn">Sauvegarder et redémarrer backend</button>
       <p class="muted" id="status"></p>
     </div>
@@ -110,6 +111,24 @@
         document.getElementById('whisperKey').value = conf.WHISPER_API_KEY || '';
       }
 
+      function validate(env, mode, apiKey) {
+        const warn = document.getElementById('warn-box');
+        const errors = [];
+        if (env === 'prod' && mode === 'stub')
+          errors.push('⚠️ Mode "stub" interdit en prod — choisis "local" ou "api".');
+        if (env === 'prod' && !apiKey.trim())
+          errors.push('⚠️ L\'API Key est obligatoire en prod — saisis une chaîne secrète.');
+        if (mode === 'api' && !document.getElementById('whisperUrl').value.trim())
+          errors.push('⚠️ Whisper API URL est requise en mode "api".');
+        if (errors.length) {
+          warn.style.display = 'block';
+          warn.textContent = errors.join(' ');
+          return false;
+        }
+        warn.style.display = 'none';
+        return true;
+      }
+
       document.getElementById('saveBtn').addEventListener('click', async () => {
         const conf = await window.monteur.getConfig();
         conf.MONTEUR_ENV = document.getElementById('env').value;
@@ -118,12 +137,16 @@
         conf.WHISPER_API_URL = document.getElementById('whisperUrl').value;
         conf.WHISPER_API_KEY = document.getElementById('whisperKey').value;
 
+        if (!validate(conf.MONTEUR_ENV, conf.MONTEUR_TRANSCRIBE_MODE, conf.MONTEUR_API_KEY)) return;
+
         const status = document.getElementById('status');
-        status.textContent = 'Sauvegarde en cours...';
+        status.textContent = 'Sauvegarde en cours…';
 
         try {
-          await window.monteur.saveConfig(conf);
-          status.textContent = 'Configuration appliquée. Backend redémarré.';
+          const result = await window.monteur.saveConfig(conf);
+          status.textContent = result.ok
+            ? '✅ Configuration appliquée. Backend redémarré.'
+            : `❌ Backend non disponible (${result.status})`;
         } catch (err) {
           status.textContent = `Erreur: ${err.message || err}`;
         }
