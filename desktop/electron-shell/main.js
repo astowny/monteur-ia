@@ -43,17 +43,23 @@ function backendEnv(config) {
     ...process.env,
     ...config,
     PYTHONPATH: path.resolve(__dirname, '../../src'),
+    // Dossier de log injecté dans le backend (utilisé par backend_entry.py
+    // pour rediriger stdout/stderr quand frozen avec console=False).
+    MONTEUR_LOG_DIR: app.getPath('userData'),
   };
 }
 
 function resolveBackendLaunch() {
-  const packagedExe = path.join(process.resourcesPath, 'backend', 'monteur-backend.exe');
+  // Avec --onedir PyInstaller : resources/backend/monteur-backend/monteur-backend.exe
+  const packagedExe = path.join(process.resourcesPath, 'backend', 'monteur-backend', 'monteur-backend.exe');
   if (app.isPackaged && fs.existsSync(packagedExe)) {
     return { command: packagedExe, args: [] };
   }
 
+  // En dev : préférer 'py' (launcher Windows qui cible Python 3) puis python3 puis python.
+  const pythonCmd = process.platform === 'win32' ? 'py' : 'python3';
   return {
-    command: process.platform === 'win32' ? 'python' : 'python3',
+    command: pythonCmd,
     args: [
       '-c',
       "from ai_service.main import create_fastapi_app; app=create_fastapi_app(); import uvicorn; uvicorn.run(app, host='127.0.0.1', port=8000)",
@@ -61,7 +67,7 @@ function resolveBackendLaunch() {
   };
 }
 
-async function waitForBackendReady(timeoutMs = 20000) {
+async function waitForBackendReady(timeoutMs = 40000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -78,24 +84,35 @@ async function waitForBackendReady(timeoutMs = 20000) {
 }
 
 async function startBackend() {
-  if (backendProcess) return;
+  if (backendProcess) return 'already_running';
   const config = loadConfig();
   const launch = resolveBackendLaunch();
 
+  // Pipe stdout/stderr du backend vers un fichier log dans userData.
+  // Cela permet de débugger les crashs silencieux (notamment en mode frozen
+  // PyInstaller console=False où sys.stdout est None sans cette redirection).
+  const logPath = path.join(app.getPath('userData'), 'backend.log');
+  const logFd = fs.openSync(logPath, 'a');
+
   backendProcess = spawn(launch.command, launch.args, {
     env: backendEnv(config),
-    stdio: 'ignore',
+    stdio: ['ignore', logFd, logFd],
     detached: false,
   });
 
-  backendProcess.on('exit', () => {
+  // Le fd parent peut être fermé : l'enfant a sa propre copie.
+  fs.closeSync(logFd);
+
+  backendProcess.on('exit', (code) => {
     backendProcess = null;
+    // Notifier toutes les fenêtres ouvertes si le backend s'arrête de façon inattendue.
+    BrowserWindow.getAllWindows().forEach((w) =>
+      w.webContents.send('backend:status', { ok: false, error: `Backend exited (code ${code})` })
+    );
   });
 
   const ok = await waitForBackendReady();
-  if (!ok) {
-    throw new Error('Backend did not start in time');
-  }
+  return ok ? 'ok' : 'timeout';
 }
 
 function stopBackend() {
@@ -112,6 +129,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 850,
+    show: false, // évite l'écran blanc au démarrage
+    backgroundColor: '#0f172a',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -120,6 +139,7 @@ function createWindow() {
   });
 
   win.loadFile('renderer.html');
+  win.once('ready-to-show', () => win.show());
 }
 
 app.whenReady().then(async () => {
@@ -127,12 +147,27 @@ app.whenReady().then(async () => {
   ipcMain.handle('config:save', async (_event, conf) => {
     saveConfig(conf);
     stopBackend();
-    await startBackend();
-    return { ok: true };
+    const result = await startBackend();
+    return { ok: result === 'ok', status: result };
   });
 
-  await startBackend();
+  // Ouvrir la fenêtre immédiatement — le bandeau de statut s'affiche pendant le boot.
   createWindow();
+
+  // Démarrer le backend en arrière-plan et notifier le renderer du résultat.
+  startBackend().then((result) => {
+    BrowserWindow.getAllWindows().forEach((w) =>
+      w.webContents.send('backend:status', {
+        ok: result === 'ok',
+        status: result,
+        error: result !== 'ok' ? `Backend non disponible (${result})` : null,
+      })
+    );
+  }).catch((err) => {
+    BrowserWindow.getAllWindows().forEach((w) =>
+      w.webContents.send('backend:status', { ok: false, error: String(err) })
+    );
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

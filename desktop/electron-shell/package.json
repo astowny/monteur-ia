@@ -6,6 +6,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "dist:dir": "electron-builder --dir --x64",
     "dist:win": "electron-builder --win nsis --x64",
     "pack:win": "electron-builder --win portable --x64"
   },
@@ -13,7 +14,7 @@
     "appId": "com.monteuria.desktop",
     "productName": "Monteur IA",
     "directories": {
-      "output": "dist"
+      "output": "dist3"
     },
     "files": [
       "main.js",
@@ -23,8 +24,8 @@
     ],
     "extraResources": [
       {
-        "from": "../backend-dist",
-        "to": "backend",
+        "from": "../backend-dist/monteur-backend",
+        "to": "backend/monteur-backend",
         "filter": [
           "**/*"
         ]
