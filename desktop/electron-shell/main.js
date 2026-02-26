@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -157,6 +157,50 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   ipcMain.handle('config:get', () => loadConfig());
+
+  // --- Dialogs fichiers ---
+  ipcMain.handle('file:pick-video', async () => {
+    const r = await dialog.showOpenDialog({
+      title: 'Sélectionner une vidéo',
+      filters: [{ name: 'Vidéos', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm', 'mts'] }],
+      properties: ['openFile'],
+    });
+    return r.canceled ? null : r.filePaths[0];
+  });
+
+  ipcMain.handle('file:pick-subtitle', async () => {
+    const r = await dialog.showOpenDialog({
+      title: 'Sélectionner un fichier de sous-titres',
+      filters: [{ name: 'Sous-titres', extensions: ['srt', 'ass', 'vtt'] }],
+      properties: ['openFile'],
+    });
+    return r.canceled ? null : r.filePaths[0];
+  });
+
+  ipcMain.handle('file:save-as', async (_event, defaultPath) => {
+    const r = await dialog.showSaveDialog({
+      title: 'Enregistrer la vidéo exportée',
+      defaultPath: defaultPath || 'output.mp4',
+      filters: [{ name: 'Vidéo MP4', extensions: ['mp4'] }],
+    });
+    return r.canceled ? null : r.filePath;
+  });
+
+  // --- Export FFmpeg ---
+  ipcMain.handle('export:run', (_event, command) => {
+    return new Promise((resolve) => {
+      const proc = spawn(command[0], command.slice(1), { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      proc.stderr.on('data', (d) => {
+        stderr += d;
+        BrowserWindow.getAllWindows().forEach((w) =>
+          w.webContents.send('export:progress', d.toString())
+        );
+      });
+      proc.once('exit', (code) => resolve({ ok: code === 0, stderr }));
+    });
+  });
+
   ipcMain.handle('config:save', async (_event, conf) => {
     saveConfig(conf);
     await stopBackend(); // attend que le port 8000 soit libéré
