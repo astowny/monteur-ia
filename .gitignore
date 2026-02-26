@@ -4,3 +4,14 @@ __pycache__/
 .pytest_cache/
 storage/
 node_modules/
+
+# PyInstaller — artefacts intermédiaires (garder les .spec)
+build/monteur-backend/
+build/pyinstaller/monteur-backend/
+build/pyinstaller/monteur-backend-new/
+
+# Binaires packagés (générés, lourds)
+desktop/backend-dist/
+
+# Builds Electron (tous les dossiers dist*)
+desktop/electron-shell/dist*/
